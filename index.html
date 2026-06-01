@@ -181,6 +181,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .logout-btn{font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;white-space:nowrap}
 .logout-btn:hover{color:var(--danger);border-color:var(--danger)}
 </style>
+<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
 <body>
 
@@ -273,17 +274,17 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       </div>
       <div class="sec">
         <div class="sec-label">출발지</div>
-        <div class="addr-wrap">
-          <input id="origin-input" type="text" placeholder="도로명·지번·건물명으로 검색" autocomplete="off" oninput="searchAddr(this,'origin')"/>
-          <div class="addr-drop" id="origin-drop"></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input id="origin-input" type="text" placeholder="주소 검색 버튼을 눌러주세요" readonly style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--surface2);color:var(--text);cursor:pointer" onclick="openPostcode('origin')"/>
+          <button onclick="openPostcode('origin')" style="padding:0 14px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">검색</button>
         </div>
         <div class="places-row" id="origin-places"></div>
       </div>
       <div class="sec">
         <div class="sec-label">도착지</div>
-        <div class="addr-wrap">
-          <input id="dest-input" type="text" placeholder="비워두면 출발지와 동일" autocomplete="off" oninput="searchAddr(this,'dest')"/>
-          <div class="addr-drop" id="dest-drop"></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input id="dest-input" type="text" placeholder="비워두면 출발지와 동일" readonly style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--surface2);color:var(--text);cursor:pointer" onclick="openPostcode('dest')"/>
+          <button onclick="openPostcode('dest')" style="padding:0 14px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">검색</button>
         </div>
         <div class="places-row" id="dest-places"></div>
       </div>
@@ -797,70 +798,48 @@ function adj(k,delta){
 }
 
 // ── 주소 검색 (Postcodify) ────────────────────────────────────
+// ── 주소 검색 (카카오 우편번호 팝업) ─────────────────────────
 const KAKAO_REST_KEY = '1487c2836c8094bf4b63e92c5c3a6571';
 
-const addrTimers={};
-async function searchAddr(input,role) {
-  const q=input.value.trim();
-  const drop=document.getElementById(role+'-drop');
-  clearTimeout(addrTimers[role]);
-  if(q.length<2){drop.style.display='none';return;}
-  addrTimers[role]=setTimeout(async()=>{
-    try{
-      // 카카오 주소 검색 API — 주소 + 좌표 동시에 반환
-      const res=await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=7`,{
-        headers:{'Authorization':`KakaoAK ${KAKAO_REST_KEY}`}
-      });
-      const data=await res.json();
-      const items=data.documents||[];
-      if(!items.length){
-        // 주소 검색 결과 없으면 키워드 검색으로 fallback
-        const res2=await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=7`,{
-          headers:{'Authorization':`KakaoAK ${KAKAO_REST_KEY}`}
-        });
-        const data2=await res2.json();
-        const items2=data2.documents||[];
-        if(!items2.length){
-          drop.innerHTML='<div class="addr-item"><div class="addr-item-main" style="color:var(--text3)">검색 결과가 없습니다</div></div>';
-          drop.style.display='block';return;
-        }
-        drop.innerHTML=items2.map(it=>{
-          const enc=encodeURIComponent(JSON.stringify({name:it.place_name,addr:it.road_address_name||it.address_name,lat:it.y,lng:it.x}));
-          return `<div class="addr-item" onclick="pickAddr('${enc}','${role}')">
-            <div class="addr-item-main">${it.place_name}</div>
-            <div class="addr-item-sub">${it.road_address_name||it.address_name}</div>
-          </div>`;
-        }).join('');
-        drop.style.display='block';return;
-      }
-      drop.innerHTML=items.map(it=>{
-        const addr=it.road_address?.address_name||it.address?.address_name||'';
-        const enc=encodeURIComponent(JSON.stringify({name:addr,addr,lat:it.y,lng:it.x}));
-        return `<div class="addr-item" onclick="pickAddr('${enc}','${role}')">
-          <div class="addr-item-main">${addr}</div>
-          <div class="addr-item-sub">${it.address?.address_name||''}</div>
-        </div>`;
-      }).join('');
-      drop.style.display='block';
-    }catch(e){drop.style.display='none';console.error('주소검색 오류',e);}
-  },350);
+function openPostcode(role) {
+  new daum.Postcode({
+    oncomplete: function(data) {
+      const addr = data.roadAddress || data.jibunAddress;
+      const displayName = data.buildingName ? `${addr} (${data.buildingName})` : addr;
+      document.getElementById(role+'-input').value = displayName;
+      // 카카오 지오코딩으로 좌표 변환
+      geocodeKakao(addr, displayName, role);
+    }
+  }).open();
 }
 
-async function pickAddr(enc,role) {
-  const {name,addr,lat,lng}=JSON.parse(decodeURIComponent(enc));
-  const displayName=name||addr;
-  document.getElementById(role+'-input').value=displayName;
-  document.getElementById(role+'-drop').style.display='none';
-  const coord=[parseFloat(lat),parseFloat(lng)];
-  if(role==='origin'){S.originText=displayName;S.originCoord=coord;}
-  else{S.destText=displayName;S.destCoord=coord;}
-  toast(`✅ ${role==='origin'?'출발지':'도착지'} 설정: ${displayName}`);
-  // 즐겨찾기 저장 물어보기
-  S.pendingPlace={role,addr:displayName,coord};
-  document.getElementById('place-addr-text').textContent=displayName;
-  document.getElementById('place-name-input').value='';
-  document.getElementById('place-overlay').classList.add('open');
+async function geocodeKakao(addr, displayName, role) {
+  try {
+    const res = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(addr)}`, {
+      headers: { 'Authorization': `KakaoAK ${KAKAO_REST_KEY}` }
+    });
+    const data = await res.json();
+    if (data.documents && data.documents.length > 0) {
+      const coord = [parseFloat(data.documents[0].y), parseFloat(data.documents[0].x)];
+      if (role === 'origin') { S.originCoord = coord; S.originText = displayName; }
+      else { S.destCoord = coord; S.destText = displayName; }
+      toast(`✅ ${role==='origin'?'출발지':'도착지'} 설정 완료`);
+      // 즐겨찾기 저장 물어보기
+      S.pendingPlace = { role, addr: displayName, coord };
+      document.getElementById('place-addr-text').textContent = displayName;
+      document.getElementById('place-name-input').value = '';
+      document.getElementById('place-overlay').classList.add('open');
+    }
+  } catch(e) {
+    // 지오코딩 실패해도 주소 텍스트는 저장
+    if (role === 'origin') S.originText = displayName;
+    else S.destText = displayName;
+    toast(`주소 설정됨 (좌표 변환 실패)`);
+  }
 }
+
+// 구 검색 방식 (하위 호환용 — 사용 안 함)
+function searchAddr(){}
 
 function closePlaceModal(){document.getElementById('place-overlay').classList.remove('open');}
 function confirmPlace(){
