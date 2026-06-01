@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>루트플래너 — 학교 영업 동선 최적화</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f5f0;--surface:#fff;--surface2:#f9f9f7;--border:#e8e8e4;
+  --text:#1a1a18;--text2:#6b6b65;--text3:#a0a09a;
+  --accent:#2563eb;--accent-light:#eff6ff;--danger:#dc2626;
+  --r:10px;--rl:14px;
+}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+#app{display:flex;height:100vh;overflow:hidden}
+#sidebar{width:360px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+#map-area{flex:1;position:relative}
+#map{width:100%;height:100%}
+#sidebar-header{padding:16px 18px 12px;border-bottom:1px solid var(--border)}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-icon{width:28px;height:28px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-icon svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.logo-text{font-size:15px;font-weight:700;letter-spacing:-.5px}
+.logo-sub{font-size:11px;color:var(--text3)}
+#tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab-btn{flex:1;padding:10px 6px;font-size:12px;font-weight:500;color:var(--text2);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.sbody{flex:1;overflow-y:auto;padding:14px 16px}
+.sbody::-webkit-scrollbar{width:3px}
+.sbody::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.sec{margin-bottom:18px}
+.sec-label{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px}
+.sido-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.sido-btn{padding:5px 11px;border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;background:var(--surface);color:var(--text2);transition:all .15s}
+.sido-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.select-all{font-size:11px;color:var(--accent);cursor:pointer;background:none;border:none;padding:2px 0;margin-bottom:6px;display:none}
+.gu-grid{display:flex;flex-wrap:wrap;gap:5px;max-height:140px;overflow-y:auto;display:none}
+.gu-chip{padding:4px 10px;border:1px solid var(--border);border-radius:20px;font-size:11px;cursor:pointer;background:var(--surface);color:var(--text2);transition:all .15s;white-space:nowrap}
+.gu-chip.on{background:var(--accent-light);color:var(--accent);border-color:var(--accent)}
+.type-row{display:flex;gap:6px}
+.type-chip{flex:1;padding:7px 4px;border:1px solid var(--border);border-radius:var(--r);font-size:12px;cursor:pointer;background:var(--surface);color:var(--text2);text-align:center;transition:all .15s}
+.type-chip.all.on{background:var(--accent-light);color:var(--accent);border-color:var(--accent)}
+.type-chip.e.on{background:#dcfce7;color:#166534;border-color:#86efac}
+.type-chip.m.on{background:#fef9c3;color:#854d0e;border-color:#fde047}
+.type-chip.h.on{background:#ede9fe;color:#5b21b6;border-color:#c4b5fd}
+.num-row{display:flex;gap:10px}
+.num-item{flex:1}
+.num-item label{font-size:11px;color:var(--text2);display:block;margin-bottom:4px}
+.num-ctrl{display:flex;align-items:center;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.num-ctrl button{width:32px;height:34px;border:none;background:none;font-size:16px;cursor:pointer;color:var(--text2)}
+.num-ctrl button:hover{background:var(--surface2)}
+.num-ctrl span{flex:1;text-align:center;font-size:14px;font-weight:500}
+.count-info{font-size:11px;color:var(--text3);margin-top:6px}
+/* Address */
+.addr-wrap{position:relative;margin-bottom:6px}
+.addr-wrap input{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;transition:border .15s}
+.addr-wrap input:focus{border-color:var(--accent)}
+.addr-drop{position:absolute;top:calc(100% + 2px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.1);max-height:220px;overflow-y:auto;display:none}
+.addr-item{padding:9px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)}
+.addr-item:last-child{border-bottom:none}
+.addr-item:hover{background:var(--surface2)}
+.addr-item-main{font-weight:500;color:var(--text)}
+.addr-item-sub{font-size:11px;color:var(--text3);margin-top:1px}
+/* Saved places */
+.places-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.place-tag{display:flex;align-items:center;gap:4px;padding:4px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:11px;cursor:pointer;transition:all .15s}
+.place-tag:hover{border-color:var(--accent);color:var(--accent)}
+.place-del{color:var(--text3);font-size:10px;line-height:1;padding:1px}
+.place-del:hover{color:var(--danger)}
+.place-add{padding:4px 9px;background:none;border:1px dashed var(--border);border-radius:20px;font-size:11px;color:var(--text3);cursor:pointer}
+.place-add:hover{border-color:var(--accent);color:var(--accent)}
+/* CTA */
+.sfooter{padding:12px 16px;border-top:1px solid var(--border)}
+#gen-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--rl);font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;box-shadow:0 2px 8px rgba(37,99,235,.25)}
+#gen-btn:hover{background:#1d4ed8}
+#gen-btn:disabled{background:#93c5fd;cursor:not-allowed;box-shadow:none}
+/* Results */
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stat-card{background:var(--surface2);border-radius:var(--r);padding:10px;text-align:center}
+.stat-val{font-size:20px;font-weight:700}
+.stat-lbl{font-size:10px;color:var(--text3);margin-top:2px}
+.act-row{display:flex;gap:6px;margin-bottom:12px}
+.act-btn{flex:1;padding:8px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);font-size:12px;font-weight:500;cursor:pointer;color:var(--text);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px}
+.act-btn:hover{background:var(--surface2);border-color:var(--accent);color:var(--accent)}
+.act-btn.edit-on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.legend-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2)}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+/* Day cards */
+.day-card{border:1px solid var(--border);border-radius:var(--rl);margin-bottom:8px;overflow:hidden}
+.resort-btn{padding:4px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface);font-size:11px;color:var(--text2);cursor:pointer;transition:all .15s;flex-shrink:0}
+.resort-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
+.kakao-btn{padding:3px 7px;background:#FEE500;color:#3C1E1E;border-radius:5px;font-size:10px;font-weight:700;text-decoration:none;flex-shrink:0;white-space:nowrap;display:inline-flex;align-items:center}
+.kakao-btn:hover{opacity:.85}
+.day-hd{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+.day-title{font-size:13px;font-weight:700}
+.day-meta{font-size:11px;color:var(--text2)}
+.day-body{padding:0 10px 10px;display:none}
+.day-body.open{display:block}
+.stop{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--border)}
+.stop:last-child{border-bottom:none}
+.stop-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0}
+.stop-info{flex:1;min-width:0}
+.stop-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stop-sub{font-size:10px;color:var(--text3)}
+.stop-badge{font-size:10px;padding:2px 5px;border-radius:4px;flex-shrink:0}
+.badge-e{background:#dcfce7;color:#166534}
+.badge-m{background:#fef9c3;color:#854d0e}
+.badge-h{background:#ede9fe;color:#5b21b6}
+/* Edit mode */
+.drag-handle{cursor:grab;color:var(--text3);font-size:15px;display:none;flex-shrink:0}
+.stop-del{display:none;background:none;border:none;cursor:pointer;color:var(--text3);padding:2px 4px;border-radius:4px;font-size:12px}
+.stop-del:hover{color:var(--danger);background:#fee2e2}
+.move-btn{display:none;background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text3);padding:2px 5px;font-size:10px;white-space:nowrap}
+.move-btn:hover{border-color:var(--accent);color:var(--accent)}
+.add-stop-btn{width:100%;padding:7px;border:1px dashed var(--border);border-radius:var(--r);background:none;color:var(--text3);font-size:12px;cursor:pointer;margin-top:6px;display:none}
+.add-stop-btn:hover{border-color:var(--accent);color:var(--accent)}
+.edit-mode .drag-handle{display:flex;align-items:center}
+.edit-mode .stop-del{display:flex;align-items:center}
+.edit-mode .move-btn{display:inline-flex;align-items:center}
+.edit-mode .add-stop-btn{display:block}
+.sortable-ghost{opacity:.3;background:var(--accent-light)}
+/* Map overlay */
+.map-legend-box{position:absolute;top:12px;right:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 13px;box-shadow:0 1px 4px rgba(0,0,0,.08);z-index:500;display:none}
+.map-legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);margin-bottom:4px}
+.map-legend-item:last-child{margin-bottom:0}
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:2000;display:none;align-items:center;justify-content:center}
+.overlay.open{display:flex}
+.modal{background:var(--surface);border-radius:var(--rl);padding:22px;width:310px;box-shadow:0 4px 20px rgba(0,0,0,.15)}
+.modal h3{font-size:15px;font-weight:700;margin-bottom:14px}
+.modal input{width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;margin-bottom:8px}
+.modal input:focus{border-color:var(--accent)}
+.modal-btns{display:flex;gap:8px;margin-top:4px}
+.modal-btns button{flex:1;padding:9px;border-radius:var(--r);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border)}
+.btn-cancel{background:var(--surface);color:var(--text)}
+.btn-ok{background:var(--accent);color:#fff;border-color:var(--accent)}
+/* School search in modal */
+.school-results{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);margin-top:6px;display:none}
+.school-item{padding:8px 11px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)}
+.school-item:last-child{border-bottom:none}
+.school-item:hover{background:var(--surface2)}
+/* Saved tab */
+.saved-card{border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin-bottom:7px;cursor:pointer;transition:all .15s}
+.saved-card:hover{border-color:var(--accent);background:var(--accent-light)}
+.saved-name{font-size:13px;font-weight:600}
+.saved-meta{font-size:11px;color:var(--text3);margin-top:2px}
+.empty-state{text-align:center;padding:40px 16px;color:var(--text3)}
+/* Toast */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;padding:9px 18px;border-radius:20px;font-size:13px;z-index:3000;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+@media(max-width:680px){
+  #app{flex-direction:column}
+  #sidebar{width:100%;max-height:50vh}
+  #map-area{flex:1}
+}
+@media print{
+  #sidebar-header,#tabs,.sfooter,#map-area,.act-row{display:none!important}
+  #sidebar{width:100%;height:auto;overflow:visible;border:none}
+  .sbody{overflow:visible;max-height:none}
+  .day-body{display:block!important}
+}
+#login-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--surface);border-radius:var(--rl);padding:32px 28px;width:320px;box-shadow:0 4px 24px rgba(0,0,0,.10)}
+.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.login-logo-icon{width:36px;height:36px;background:var(--accent);border-radius:9px;display:flex;align-items:center;justify-content:center}
+.login-logo-icon svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.login-title{font-size:17px;font-weight:700;letter-spacing:-.5px}
+.login-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.login-field{margin-bottom:12px}
+.login-field label{font-size:11px;color:var(--text2);display:block;margin-bottom:4px;font-weight:600}
+.login-field input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;transition:border .15s}
+.login-field input:focus{border-color:var(--accent)}
+.login-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;transition:all .15s}
+.login-btn:hover{background:#1d4ed8}
+.login-btn:disabled{background:#93c5fd;cursor:not-allowed}
+.login-err{font-size:12px;color:var(--danger);margin-top:8px;text-align:center;min-height:18px}
+.user-info{display:flex;align-items:center;gap:6px;margin-top:4px}
+.user-email{font-size:11px;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logout-btn{font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;white-space:nowrap}
+.logout-btn:hover{color:var(--danger);border-color:var(--danger)}
+</style>
+</head>
+<body>
+
+<!-- 로그인 화면 -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+      </div>
+      <div>
+        <div class="login-title">루트플래너</div>
+        <div class="login-sub">학교 영업 동선 최적화</div>
+      </div>
+    </div>
+    <div class="login-field">
+      <label>이메일</label>
+      <input type="email" id="login-email" placeholder="이메일 입력" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <div class="login-field">
+      <label>비밀번호</label>
+      <input type="password" id="login-pw" placeholder="비밀번호 입력" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">로그인</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="logo-text">루트플래너</div>
+          <div class="user-info">
+            <span class="user-email" id="user-email"></span>
+            <button class="logout-btn" onclick="doLogout()">로그아웃</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="loading-bar" style="display:none;height:3px;background:linear-gradient(90deg,var(--accent) 0%,#93c5fd 50%,var(--accent) 100%);background-size:200%;animation:loadingAnim 1.2s linear infinite"></div>
+    <style>@keyframes loadingAnim{0%{background-position:0%}100%{background-position:200%}}</style>
+    <div id="tabs">
+      <button class="tab-btn active" onclick="switchTab('plan')">루트 설정</button>
+      <button class="tab-btn" onclick="switchTab('result')" id="result-tab" style="display:none">결과 보기</button>
+      <button class="tab-btn" onclick="switchTab('saved')">저장된 루트</button>
+    </div>
+
+    <!-- PLAN -->
+    <div class="sbody" id="tab-plan">
+      <div class="sec">
+        <div class="sec-label">지역 선택 (다중 선택)</div>
+        <div class="sido-row" id="sido-row"></div>
+        <button class="select-all" id="select-all-btn" onclick="toggleAllGu()">전체 선택</button>
+        <div class="gu-grid" id="gu-grid"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-label">학교 종류</div>
+        <div class="type-row">
+          <div class="type-chip all on" onclick="toggleType('all')">전체</div>
+          <div class="type-chip e" onclick="toggleType('초등학교')">초등</div>
+          <div class="type-chip m" onclick="toggleType('중학교')">중등</div>
+          <div class="type-chip h" onclick="toggleType('고등학교')">고등</div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-label">방문 설정</div>
+        <div class="num-row">
+          <div class="num-item">
+            <label>방문 일수 (최대 50일)</label>
+            <div class="num-ctrl">
+              <button onclick="adj('days',-1)">−</button>
+              <span id="days-val">3</span>
+              <button onclick="adj('days',1)">+</button>
+            </div>
+          </div>
+          <div class="num-item">
+            <label>하루 최대 방문</label>
+            <div class="num-ctrl">
+              <button onclick="adj('max',-1)">−</button>
+              <span id="max-val">15</span>
+              <button onclick="adj('max',1)">+</button>
+            </div>
+          </div>
+        </div>
+        <div class="count-info" id="count-info">지역을 선택하면 학교 수가 표시됩니다</div>
+      </div>
+      <div class="sec">
+        <div class="sec-label">출발지</div>
+        <div class="addr-wrap">
+          <input id="origin-input" type="text" placeholder="도로명·지번·건물명으로 검색" autocomplete="off" oninput="searchAddr(this,'origin')"/>
+          <div class="addr-drop" id="origin-drop"></div>
+        </div>
+        <div class="places-row" id="origin-places"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-label">도착지</div>
+        <div class="addr-wrap">
+          <input id="dest-input" type="text" placeholder="비워두면 출발지와 동일" autocomplete="off" oninput="searchAddr(this,'dest')"/>
+          <div class="addr-drop" id="dest-drop"></div>
+        </div>
+        <div class="places-row" id="dest-places"></div>
+      </div>
+    </div>
+    <div class="sfooter" id="footer-plan">
+      <button id="gen-btn" onclick="generate()">🗺️ 루트 자동 생성</button>
+    </div>
+
+    <!-- RESULT -->
+    <div class="sbody" id="tab-result" style="display:none">
+      <div class="stats-grid" id="stats"></div>
+      <div class="act-row">
+        <button class="act-btn" onclick="saveRoute()">💾 저장</button>
+        <button class="act-btn" onclick="window.print()">🖨️ 출력</button>
+        <button class="act-btn" id="edit-btn" onclick="toggleEdit()">✏️ 편집</button>
+      </div>
+      <div class="legend-row" id="legend"></div>
+      <div id="route-cards"></div>
+    </div>
+
+    <!-- SAVED -->
+    <div class="sbody" id="tab-saved" style="display:none">
+      <div id="saved-list"></div>
+    </div>
+  </div>
+
+  <div id="map-area">
+    <div id="map"></div>
+    <div class="map-legend-box" id="map-legend-box">
+      <div style="font-size:10px;color:var(--text3);font-weight:700;margin-bottom:6px">경로 범례</div>
+      <div id="map-legend"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Place save modal -->
+<div class="overlay" id="place-overlay">
+  <div class="modal">
+    <h3>즐겨찾기 추가</h3>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:10px" id="place-addr-text"></div>
+    <input type="text" id="place-name-input" placeholder="장소 이름 (예: 우리집, 회사)"/>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closePlaceModal()">건너뛰기</button>
+      <button class="btn-ok" onclick="confirmPlace()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Route name modal -->
+<div class="overlay" id="route-overlay">
+  <div class="modal">
+    <h3>루트 저장</h3>
+    <input type="text" id="route-name-input" placeholder="루트 이름 (예: 경기남부 3일)"/>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeRouteModal()">취소</button>
+      <button class="btn-ok" onclick="confirmSaveRoute()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add school modal -->
+<div class="overlay" id="school-overlay">
+  <div class="modal">
+    <h3>학교 추가</h3>
+    <input type="text" id="school-search-input" placeholder="학교명·지역으로 검색" oninput="searchSchool(this.value)" autocomplete="off"/>
+    <div class="school-results" id="school-results"></div>
+    <div class="modal-btns" style="margin-top:10px">
+      <button class="btn-cancel" onclick="closeSchoolModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── 외부 라이브러리 동적 로드 ──────────────────────────────────
+function loadScript(src, cb) {
+  const s = document.createElement('script');
+  s.src = src; s.onload = cb;
+  document.head.appendChild(s);
+}
+function loadLink(href) {
+  const l = document.createElement('link');
+  l.rel = 'stylesheet'; l.href = href;
+  document.head.appendChild(l);
+}
+
+// ── Supabase 설정 ─────────────────────────────────────────────
+const SUPABASE_URL = 'https://tcyrulwoklygsnyexxot.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_YDv_bGRTH7njHaTWJ0am0g_uEJ9X4wW';
+
+async function sbFetch(query) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${query}`, {
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error(`Supabase error: ${res.status}`);
+  return res.json();
+}
+
+// auth 헤더 포함 fetch (로그인 토큰 사용)
+function authFetch(url, opts={}) {
+  const token = localStorage.getItem('rp_token') || SUPABASE_KEY;
+  return fetch(`${SUPABASE_URL}/rest/v1/${url}`, {
+    ...opts,
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(opts.headers||{})
+    }
+  });
+}
+
+// ── 데이터 상태 ───────────────────────────────────────────────
+let ALL_SCHOOLS = [];
+let GEO_MAP = {}; // { main_geo: Set(sub_geo) }
+
+async function loadSchools() {
+  showLoading(true);
+  try {
+    let all = [], from = 0, pageSize = 1000;
+    while(true) {
+      const res = await authFetch(`schools?select=name,latitude,longitude,address,main_geo,sub_geo,school_type&order=id&limit=${pageSize}&offset=${from}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = await res.json();
+      all = all.concat(rows);
+      if(rows.length < pageSize) break;
+      from += pageSize;
+    }
+    ALL_SCHOOLS = all.map(r => ({
+      name: r.name,
+      type: r.school_type,
+      lat: parseFloat(r.latitude),
+      lng: parseFloat(r.longitude),
+      addr: r.address,
+      sido: r.main_geo,
+      gu: r.sub_geo,
+    }));
+    GEO_MAP = {};
+    ALL_SCHOOLS.forEach(s => {
+      if (!GEO_MAP[s.sido]) GEO_MAP[s.sido] = new Set();
+      GEO_MAP[s.sido].add(s.gu);
+    });
+    buildSido();
+    toast(`✅ 학교 데이터 ${ALL_SCHOOLS.length.toLocaleString()}개 로드 완료`);
+  } catch(e) {
+    toast('⚠️ 데이터 로드 실패: ' + e.message);
+    console.error(e);
+  } finally {
+    showLoading(false);
+  }
+}
+
+function showLoading(on) {
+  document.getElementById('loading-bar').style.display = on ? 'block' : 'none';
+  document.getElementById('gen-btn').disabled = on;
+  document.getElementById('gen-btn').textContent = on ? '⏳ 데이터 로딩 중...' : '🗺️ 루트 자동 생성';
+}
+
+const COLORS = ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2','#be185d','#ea580c'];
+
+
+// ── 상태 ──────────────────────────────────────────────────────
+const S = {
+  sido: null, gus: new Set(), types: new Set(['all']),
+  days: 3, max: 15,
+  originCoord: null, originText: '',
+  destCoord: null, destText: '',
+  places: JSON.parse(localStorage.getItem('rp_places')||'[]'),
+  routes: JSON.parse(localStorage.getItem('rp_routes')||'[]'),
+  currentClusters: null,
+  editMode: false,
+  addingToDay: null,
+  pendingPlace: null,
+};
+
+// ── 지도 ──────────────────────────────────────────────────────
+let map, markers=[], lines=[], sortables=[];
+
+function initMap() {
+  loadLink('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css');
+  loadScript('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js', ()=>{
+    map = L.map('map').setView([37.35,127.05],10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18}).addTo(map);
+    toast('지역을 선택하면 학교가 지도에 표시됩니다');
+  });
+}
+
+function clearMap() {
+  markers.forEach(m=>map.removeLayer(m));
+  lines.forEach(l=>map.removeLayer(l));
+  markers=[]; lines=[];
+}
+
+function pinIcon(label, color, small=false) {
+  const sz = small ? 8 : 22;
+  const html = small
+    ? `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)"></div>`
+    : `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25)">${label}</div>`;
+  return L.divIcon({html,className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
+}
+
+function showSchools(schools) {
+  if(!map) return;
+  clearMap();
+  schools.forEach(s=>{
+    const c = s.type==='초등학교'?'#16a34a':s.type==='중학교'?'#d97706':s.type==='고등학교'?'#7c3aed':'#6b7280';
+    markers.push(L.marker([s.lat,s.lng],{icon:pinIcon('',c,true)}).addTo(map).bindPopup(`<b>${s.name}</b><br>${s.type}·${s.addr}`));
+  });
+  fitBounds(schools);
+}
+
+function showRoute(clusters) {
+  if(!map) return;
+  clearMap();
+
+  // 출발지 마커
+  if(S.originCoord) {
+    const icon = L.divIcon({
+      html:`<div style="width:32px;height:32px;border-radius:50%;background:#1a1a18;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">출발</div>`,
+      className:'',iconSize:[32,32],iconAnchor:[16,16]
+    });
+    markers.push(L.marker(S.originCoord,{icon,zIndexOffset:1000}).addTo(map).bindPopup(`<b>출발지</b><br>${S.originText||''}`));
+  }
+
+  // 도착지 마커 (출발지와 다를 때만)
+  const destCoord = S.destCoord || S.originCoord;
+  if(destCoord && JSON.stringify(destCoord) !== JSON.stringify(S.originCoord)) {
+    const icon = L.divIcon({
+      html:`<div style="width:32px;height:32px;border-radius:50%;background:#16a34a;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">도착</div>`,
+      className:'',iconSize:[32,32],iconAnchor:[16,16]
+    });
+    markers.push(L.marker(destCoord,{icon,zIndexOffset:1000}).addTo(map).bindPopup(`<b>도착지</b><br>${S.destText||''}`));
+  }
+
+  clusters.forEach((group,di)=>{
+    const color=COLORS[di%COLORS.length];
+    group.forEach((s,si)=>{
+      markers.push(L.marker([s.lat,s.lng],{icon:pinIcon(si+1,color)}).addTo(map).bindPopup(`<b>Day${di+1}-${si+1}</b><br>${s.name}`));
+    });
+    // 출발지 → 학교들 → 도착지 전체 경로선
+    const pts = [];
+    if(S.originCoord) pts.push(S.originCoord);
+    group.forEach(s=>pts.push([s.lat,s.lng]));
+    if(destCoord) pts.push(destCoord);
+    else if(S.originCoord) pts.push(S.originCoord);
+    if(pts.length>1) lines.push(L.polyline(pts,{color,weight:2.5,opacity:.7,dashArray:'6,4'}).addTo(map));
+  });
+
+  // 전체 범위에 출발/도착 포함
+  const allPts = clusters.flat();
+  if(S.originCoord) allPts.push({lat:S.originCoord[0],lng:S.originCoord[1]});
+  fitBounds(allPts);
+
+  const box=document.getElementById('map-legend-box');
+  box.style.display='block';
+  document.getElementById('map-legend').innerHTML=clusters.map((g,i)=>`
+    <div class="map-legend-item"><div class="map-legend-dot" style="width:8px;height:8px;border-radius:50%;background:${COLORS[i%COLORS.length]};flex-shrink:0"></div>Day ${i+1} (${g.length}곳)</div>`).join('');
+}
+
+function fitBounds(schools) {
+  if(!schools.length||!map) return;
+  const lats=schools.map(s=>s.lat),lngs=schools.map(s=>s.lng);
+  map.fitBounds([[Math.min(...lats)-.02,Math.min(...lngs)-.02],[Math.max(...lats)+.02,Math.max(...lngs)+.02]]);
+}
+
+// ── 알고리즘 ──────────────────────────────────────────────────
+
+// 실제 거리(km) — Haversine
+function haversine(a, b) {
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lng - a.lng) * Math.PI / 180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180) * Math.cos(b.lat*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+// 빠른 거리 계산 (클러스터링용 — 제곱 유클리드)
+function d2(a, b) { return (a.lat-b.lat)**2 + (a.lng-b.lng)**2; }
+
+// ── 균등 제약 K-means (Balanced K-means) ─────────────────────
+// 클러스터 크기를 (전체÷k)±1로 제한하면서 지리 군집도 유지
+function balancedKmeans(pts, k, iters = 60) {
+  if (!pts.length) return [];
+  k = Math.min(k, pts.length);
+  const n = pts.length;
+  const target = Math.ceil(n / k); // 목표 크기
+
+  // K-means++ 초기 중심 선택
+  const centers = [{ ...pts[Math.floor(Math.random() * n)] }];
+  while (centers.length < k) {
+    const dists = pts.map(p => Math.min(...centers.map(c => d2(p, c))));
+    const total = dists.reduce((a, b) => a + b, 0);
+    let r = Math.random() * total, chosen = n - 1;
+    for (let i = 0; i < n; i++) { r -= dists[i]; if (r <= 0) { chosen = i; break; } }
+    centers.push({ ...pts[chosen] });
+  }
+
+  let labels = new Array(n).fill(0);
+
+  for (let it = 0; it < iters; it++) {
+    // 각 학교를 가장 가까운 클러스터에 배정 (단, 클러스터 크기 제한 적용)
+    const counts = new Array(k).fill(0);
+    const newLabels = new Array(n).fill(-1);
+
+    // 거리 기준으로 정렬해서 가까운 것부터 배정
+    const sorted = pts
+      .map((p, i) => ({ i, dists: centers.map(c => d2(p, c)) }))
+      .sort((a, b) => Math.min(...a.dists) - Math.min(...b.dists));
+
+    sorted.forEach(({ i, dists }) => {
+      // 가장 가까우면서 아직 여유 있는 클러스터에 배정
+      const order = dists.map((d, ci) => ({ ci, d })).sort((a, b) => a.d - b.d);
+      for (const { ci } of order) {
+        if (counts[ci] < target + (ci < n % k ? 1 : 0)) {
+          newLabels[i] = ci;
+          counts[ci]++;
+          break;
+        }
+      }
+      // 모든 클러스터가 꽉 찼으면 가장 가까운 곳에 강제 배정
+      if (newLabels[i] === -1) {
+        const ci = order[0].ci;
+        newLabels[i] = ci;
+        counts[ci]++;
+      }
+    });
+
+    // 수렴 체크
+    if (newLabels.every((l, i) => l === labels[i])) break;
+    labels = newLabels;
+
+    // 중심 갱신
+    centers.forEach((_, ci) => {
+      const sub = pts.filter((_, j) => labels[j] === ci);
+      if (!sub.length) return;
+      centers[ci] = {
+        lat: sub.reduce((s, p) => s + p.lat, 0) / sub.length,
+        lng: sub.reduce((s, p) => s + p.lng, 0) / sub.length,
+      };
+    });
+  }
+  return labels;
+}
+
+// 빠른 거리 계산 (클러스터링용)
+function d2(a, b) { return (a.lat - b.lat) ** 2 + (a.lng - b.lng) ** 2; }
+
+// Nearest Neighbor (출발지 기준) + 2-opt 개선
+function optimizeRoute(pts, startCoord) {
+  if (!pts.length) return [];
+  if (pts.length === 1) return [0];
+  const n = pts.length;
+
+  // 출발지가 있으면 가장 가까운 학교부터 시작, 없으면 최북단(위도 최대)부터
+  let startIdx = 0;
+  if (startCoord) {
+    let bd = Infinity;
+    pts.forEach((p, i) => { const d = d2(p, startCoord); if (d < bd) { bd = d; startIdx = i; } });
+  } else {
+    let maxLat = -Infinity;
+    pts.forEach((p, i) => { if (p.lat > maxLat) { maxLat = p.lat; startIdx = i; } });
+  }
+
+  // Nearest Neighbor TSP
+  const vis = new Array(n).fill(false);
+  const ord = [startIdx];
+  vis[startIdx] = true;
+  for (let i = 1; i < n; i++) {
+    const last = ord[ord.length - 1];
+    let best = -1, bd = Infinity;
+    for (let j = 0; j < n; j++) {
+      if (vis[j]) continue;
+      const d = haversine(pts[last], pts[j]);
+      if (d < bd) { bd = d; best = j; }
+    }
+    vis[best] = true;
+    ord.push(best);
+  }
+
+  // 2-opt: 교차 경로 제거
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (let i = 0; i < n - 1; i++) {
+      for (let j = i + 2; j < n; j++) {
+        if (j === n - 1 && i === 0) continue;
+        const [a, b, c, dd] = [ord[i], ord[i+1], ord[j], ord[(j+1) % n]];
+        const before = haversine(pts[a], pts[b]) + haversine(pts[c], pts[dd]);
+        const after  = haversine(pts[a], pts[c]) + haversine(pts[b], pts[dd]);
+        if (after < before - 0.001) {
+          ord.splice(i + 1, j - i, ...ord.slice(i + 1, j + 1).reverse());
+          improved = true;
+        }
+      }
+    }
+  }
+  return ord;
+}
+
+// ── 3단계: 출발지 기준 Day 순서 정렬 ────────────────────────
+// 출발지와 가장 가까운 클러스터 → Day 1, 이후 인접 클러스터 순으로 배정
+function sortClustersByOrigin(clusters, originCoord) {
+  if (!originCoord || clusters.length <= 1) return clusters;
+
+  // 각 클러스터의 무게중심 계산
+  const centroids = clusters.map(g => ({
+    lat: g.reduce((s, p) => s + p.lat, 0) / g.length,
+    lng: g.reduce((s, p) => s + p.lng, 0) / g.length,
+  }));
+
+  // 출발지와 가장 가까운 클러스터부터 탐욕적으로 순서 정렬
+  const visited = new Array(clusters.length).fill(false);
+  const order = [];
+  let cur = { lat: originCoord[0], lng: originCoord[1] };
+
+  for (let step = 0; step < clusters.length; step++) {
+    let best = -1, bd = Infinity;
+    centroids.forEach((c, i) => {
+      if (visited[i]) return;
+      const d = haversine(cur, c);
+      if (d < bd) { bd = d; best = i; }
+    });
+    visited[best] = true;
+    order.push(clusters[best]);
+    cur = centroids[best];
+  }
+  return order;
+}
+
+// ── 지역 UI ──────────────────────────────────────────────────
+function buildSido() {
+  const sidos = Object.keys(GEO_MAP).sort();
+  document.getElementById('sido-row').innerHTML = sidos.map(s =>
+    `<div class="sido-btn" data-sido="${s}" onclick="selectSido('${s}')">${s}</div>`
+  ).join('');
+}
+
+function selectSido(sido) {
+  S.sido=sido; S.gus=new Set();
+  document.querySelectorAll('.sido-btn').forEach(b=>b.classList.toggle('on',b.dataset.sido===sido));
+  const gus = [...(GEO_MAP[sido]||new Set())].sort();
+  const grid=document.getElementById('gu-grid');
+  const btn=document.getElementById('select-all-btn');
+  grid.style.display='flex'; btn.style.display='block';
+  grid.innerHTML=gus.map(g=>`<div class="gu-chip" data-gu="${g}" onclick="toggleGu('${g}')">${g}</div>`).join('');
+  updateCountInfo();
+}
+
+function toggleGu(gu) {
+  S.gus.has(gu)?S.gus.delete(gu):S.gus.add(gu);
+  document.querySelectorAll('.gu-chip').forEach(c=>c.classList.toggle('on',S.gus.has(c.dataset.gu)));
+  updateSelectAllBtn();
+  updateCountInfo();
+  showSchools(filteredSchools());
+}
+
+function toggleAllGu() {
+  const gus=[...(GEO_MAP[S.sido]||new Set())];
+  S.gus= S.gus.size===gus.length ? new Set() : new Set(gus);
+  document.querySelectorAll('.gu-chip').forEach(c=>c.classList.toggle('on',S.gus.has(c.dataset.gu)));
+  updateSelectAllBtn(); updateCountInfo(); showSchools(filteredSchools());
+}
+
+function updateSelectAllBtn() {
+  if(!S.sido) return;
+  const gus=[...(GEO_MAP[S.sido]||new Set())];
+  document.getElementById('select-all-btn').textContent=S.gus.size===gus.length?'전체 해제':'전체 선택';
+}
+
+function toggleType(t) {
+  if(t==='all'){S.types=new Set(['all']);}
+  else{S.types.delete('all');S.types.has(t)?S.types.delete(t):S.types.add(t);if(!S.types.size)S.types.add('all');}
+  document.querySelectorAll('.type-chip').forEach(c=>{
+    const k=c.classList.contains('all')?'all':c.classList.contains('e')?'초등학교':c.classList.contains('m')?'중학교':'고등학교';
+    c.classList.toggle('on',S.types.has(k));
+  });
+  updateCountInfo(); showSchools(filteredSchools());
+}
+
+function filteredSchools() {
+  return ALL_SCHOOLS.filter(s=>{
+    if(S.sido && s.sido!==S.sido) return false;
+    if(S.gus.size && !S.gus.has(s.gu)) return false;
+    if(!S.types.has('all') && !S.types.has(s.type)) return false;
+    return true;
+  });
+}
+
+
+function updateCountInfo() {
+  const n=filteredSchools().length;
+  const el=document.getElementById('count-info');
+  if(!n){el.textContent='선택된 학교가 없습니다';el.style.color='var(--danger)';return;}
+  const rec=Math.ceil(n/S.max);
+  el.style.color='var(--text3)';
+  el.textContent=`선택 ${n}개 학교 · ${S.days}일 기준 하루 평균 ${Math.ceil(n/S.days)}곳 (권장 ${rec}일)`;
+}
+
+// ── 숫자 조정 ─────────────────────────────────────────────────
+const NUM={days:{min:1,max:50,id:'days-val',key:'days'},max:{min:5,max:30,id:'max-val',key:'max'}};
+function adj(k,delta){
+  const cfg=NUM[k];const el=document.getElementById(cfg.id);
+  S[cfg.key]=Math.max(cfg.min,Math.min(cfg.max,parseInt(el.textContent)+delta));
+  el.textContent=S[cfg.key]; updateCountInfo();
+}
+
+// ── 주소 검색 (Postcodify) ────────────────────────────────────
+const KAKAO_REST_KEY = '1487c2836c8094bf4b63e92c5c3a6571';
+
+const addrTimers={};
+async function searchAddr(input,role) {
+  const q=input.value.trim();
+  const drop=document.getElementById(role+'-drop');
+  clearTimeout(addrTimers[role]);
+  if(q.length<2){drop.style.display='none';return;}
+  addrTimers[role]=setTimeout(async()=>{
+    try{
+      // 카카오 주소 검색 API — 주소 + 좌표 동시에 반환
+      const res=await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(q)}&size=7`,{
+        headers:{'Authorization':`KakaoAK ${KAKAO_REST_KEY}`}
+      });
+      const data=await res.json();
+      const items=data.documents||[];
+      if(!items.length){
+        // 주소 검색 결과 없으면 키워드 검색으로 fallback
+        const res2=await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(q)}&size=7`,{
+          headers:{'Authorization':`KakaoAK ${KAKAO_REST_KEY}`}
+        });
+        const data2=await res2.json();
+        const items2=data2.documents||[];
+        if(!items2.length){
+          drop.innerHTML='<div class="addr-item"><div class="addr-item-main" style="color:var(--text3)">검색 결과가 없습니다</div></div>';
+          drop.style.display='block';return;
+        }
+        drop.innerHTML=items2.map(it=>{
+          const enc=encodeURIComponent(JSON.stringify({name:it.place_name,addr:it.road_address_name||it.address_name,lat:it.y,lng:it.x}));
+          return `<div class="addr-item" onclick="pickAddr('${enc}','${role}')">
+            <div class="addr-item-main">${it.place_name}</div>
+            <div class="addr-item-sub">${it.road_address_name||it.address_name}</div>
+          </div>`;
+        }).join('');
+        drop.style.display='block';return;
+      }
+      drop.innerHTML=items.map(it=>{
+        const addr=it.road_address?.address_name||it.address?.address_name||'';
+        const enc=encodeURIComponent(JSON.stringify({name:addr,addr,lat:it.y,lng:it.x}));
+        return `<div class="addr-item" onclick="pickAddr('${enc}','${role}')">
+          <div class="addr-item-main">${addr}</div>
+          <div class="addr-item-sub">${it.address?.address_name||''}</div>
+        </div>`;
+      }).join('');
+      drop.style.display='block';
+    }catch(e){drop.style.display='none';console.error('주소검색 오류',e);}
+  },350);
+}
+
+async function pickAddr(enc,role) {
+  const {name,addr,lat,lng}=JSON.parse(decodeURIComponent(enc));
+  const displayName=name||addr;
+  document.getElementById(role+'-input').value=displayName;
+  document.getElementById(role+'-drop').style.display='none';
+  const coord=[parseFloat(lat),parseFloat(lng)];
+  if(role==='origin'){S.originText=displayName;S.originCoord=coord;}
+  else{S.destText=displayName;S.destCoord=coord;}
+  toast(`✅ ${role==='origin'?'출발지':'도착지'} 설정: ${displayName}`);
+  // 즐겨찾기 저장 물어보기
+  S.pendingPlace={role,addr:displayName,coord};
+  document.getElementById('place-addr-text').textContent=displayName;
+  document.getElementById('place-name-input').value='';
+  document.getElementById('place-overlay').classList.add('open');
+}
+
+function closePlaceModal(){document.getElementById('place-overlay').classList.remove('open');}
+function confirmPlace(){
+  const name=document.getElementById('place-name-input').value.trim();
+  if(!name){closePlaceModal();return;}
+  const coord=S.pendingPlace.coord||(S.pendingPlace.role==='origin'?S.originCoord:S.destCoord);
+  S.places.push({name,addr:S.pendingPlace.addr,coord});
+  localStorage.setItem('rp_places',JSON.stringify(S.places));
+  closePlaceModal(); renderPlaces(); toast(`"${name}" 즐겨찾기 저장됨`);
+}
+
+function renderPlaces(){
+  ['origin','dest'].forEach(role=>{
+    const el=document.getElementById(role+'-places');
+    el.innerHTML=S.places.map((p,i)=>`
+      <div class="place-tag" onclick="usePlaceTag(${i},'${role}')">📍${p.name}
+        <span class="place-del" onclick="event.stopPropagation();delPlace(${i})">✕</span>
+      </div>`).join('')+`<button class="place-add" onclick="openAddPlace('${role}')">+추가</button>`;
+  });
+}
+
+function usePlaceTag(i,role){
+  const p=S.places[i];
+  document.getElementById(role+'-input').value=p.name;
+  if(role==='origin'){S.originText=p.name;S.originCoord=p.coord;}
+  else{S.destText=p.name;S.destCoord=p.coord;}
+}
+function delPlace(i){S.places.splice(i,1);localStorage.setItem('rp_places',JSON.stringify(S.places));renderPlaces();}
+function openAddPlace(role){
+  const v=document.getElementById(role+'-input').value.trim();
+  if(!v){toast('먼저 주소를 검색해주세요');return;}
+  S.pendingPlace={role,addr:v};
+  document.getElementById('place-addr-text').textContent=v;
+  document.getElementById('place-name-input').value='';
+  document.getElementById('place-overlay').classList.add('open');
+}
+
+// ── 루트 생성 ─────────────────────────────────────────────────
+function generate(){
+  const schools = filteredSchools();
+  if (!schools.length) { toast('지역과 학교 종류를 선택해주세요'); return; }
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true; btn.textContent = '⏳ 계산 중...';
+
+  setTimeout(() => {
+    const k = Math.min(S.days, schools.length);
+
+    // 1단계: 균등 제약 K-means — 지리 군집 + 균등 크기 동시 보장
+    const labels = balancedKmeans(schools, k);
+    const groups = Array.from({ length: k }, () => []);
+    schools.forEach((s, i) => groups[labels[i]].push(s));
+    const validGroups = groups.filter(g => g.length);
+
+    // 2단계: 클러스터 내 경로 최적화 (출발지 기준 NN + 2-opt)
+    const originCoord = S.originCoord;
+    const optimized = validGroups.map(g => {
+      const ord = optimizeRoute(g, originCoord);
+      return ord.map(i => g[i]);
+    });
+
+    // 3단계: 출발지와 가장 가까운 클러스터를 Day 1로 정렬
+    const sorted = sortClustersByOrigin(optimized, originCoord);
+
+    S.currentClusters = sorted;
+    showRoute(sorted);
+    renderResult(sorted);
+    document.getElementById('result-tab').style.display = 'block';
+    switchTab('result');
+    btn.disabled = false; btn.textContent = '🗺️ 루트 자동 생성';
+  }, 30);
+}
+
+// ── 결과 렌더 ─────────────────────────────────────────────────
+function calcDayDist(group) {
+  if (group.length < 2) return 0;
+  let dist = 0;
+  for (let i = 1; i < group.length; i++) dist += haversine(group[i-1], group[i]);
+  if (S.originCoord) dist += haversine({lat:S.originCoord[0],lng:S.originCoord[1]}, group[0]);
+  return dist;
+}
+
+function resortDay(di) {
+  const g = S.currentClusters[di];
+  const ord = optimizeRoute(g, S.originCoord);
+  S.currentClusters[di] = ord.map(i => g[i]);
+  renderResult(S.currentClusters);
+  showRoute(S.currentClusters);
+  if (S.editMode) setTimeout(initSortable, 0);
+  toast(`Day ${di+1} 동선 재최적화 완료`);
+}
+
+function renderResult(clusters){
+  const total = clusters.reduce((s,g) => s+g.length, 0);
+  const totalDist = clusters.reduce((s,g) => s+calcDayDist(g), 0);
+  document.getElementById('stats').innerHTML=`
+    <div class="stat-card"><div class="stat-val">${clusters.length}</div><div class="stat-lbl">방문 일수</div></div>
+    <div class="stat-card"><div class="stat-val">${total}</div><div class="stat-lbl">총 방문 학교</div></div>
+    <div class="stat-card"><div class="stat-val">${totalDist.toFixed(0)}<span style="font-size:12px;font-weight:400">km</span></div><div class="stat-lbl">총 예상 거리</div></div>`;
+  document.getElementById('legend').innerHTML=clusters.map((g,i)=>`
+    <div class="legend-item"><div class="legend-dot" style="background:${COLORS[i%COLORS.length]}"></div>Day ${i+1}</div>`).join('');
+  const origin = S.originText||'출발지', dest = S.destText||origin;
+  document.getElementById('route-cards').innerHTML=clusters.map((group,di)=>{
+    const color = COLORS[di%COLORS.length];
+    const dist = calcDayDist(group);
+    const others = clusters.map((_,i)=>i).filter(i=>i!==di);
+    const moveBtns = others.map(i=>`<button class="move-btn" onclick="moveStop(${di},__SI__,${i})">→Day${i+1}</button>`).join('');
+    const stops = group.map((s,si)=>{
+      const bc = s.type==='초등학교'?'badge-e':s.type==='중학교'?'badge-m':'badge-h';
+      const typeLabel = s.type==='초등학교'?'초등':s.type==='중학교'?'중등':'고등';
+      const enc = encodeURIComponent(JSON.stringify(s));
+      const kakaoUrl = `https://map.kakao.com/link/to/${encodeURIComponent(s.name)},${s.lat},${s.lng}`;
+      return `<div class="stop" data-school="${enc}">
+        <span class="drag-handle">⠿</span>
+        <div class="stop-num" style="background:${color}">${si+1}</div>
+        <div class="stop-info"><div class="stop-name">${s.name}</div><div class="stop-sub">${s.addr}</div></div>
+        <span class="stop-badge ${bc}">${typeLabel}</span>
+        <a href="${kakaoUrl}" target="_blank" class="kakao-btn" title="카카오맵으로 열기">길찾기</a>
+        ${moveBtns.replace(/__SI__/g,si)}
+        <button class="stop-del" onclick="delStop(${di},${si})">✕</button>
+      </div>`;
+    }).join('');
+    return `<div class="day-card">
+      <div class="day-hd" style="background:${color}15" onclick="toggleDay(${di})">
+        <div>
+          <div class="day-title" style="color:${color}">Day ${di+1}</div>
+          <div class="day-meta" id="dm-${di}">${group.length}개 학교 · ${dist.toFixed(1)}km</div>
+        </div>
+        <button class="resort-btn" onclick="event.stopPropagation();resortDay(${di})" title="동선 재최적화">⟳ 재정렬</button>
+      </div>
+      <div class="day-body${di===0?' open':''}" id="db-${di}">
+        <div class="stop"><div class="stop-num" style="background:#9ca3af">↑</div><div class="stop-info"><div class="stop-name">${origin}</div><div class="stop-sub">출발지</div></div></div>
+        <div id="dl-${di}">${stops}</div>
+        <div class="stop"><div class="stop-num" style="background:#9ca3af">✓</div><div class="stop-info"><div class="stop-name">${dest}</div><div class="stop-sub">도착지</div></div></div>
+        <button class="add-stop-btn" onclick="openSchoolModal(${di})">+ 학교 추가</button>
+      </div>
+    </div>`;
+  }).join('');
+  if(S.editMode){document.getElementById('route-cards').classList.add('edit-mode');setTimeout(initSortable,0);}
+}
+
+function toggleDay(i){document.getElementById('db-'+i).classList.toggle('open');}
+
+// ── 편집 모드 ─────────────────────────────────────────────────
+function toggleEdit(){
+  S.editMode=!S.editMode;
+  const btn=document.getElementById('edit-btn');
+  btn.classList.toggle('act-btn',true);
+  btn.classList.toggle('edit-on',S.editMode);
+  btn.textContent=S.editMode?'✅ 완료':'✏️ 편집';
+  document.getElementById('route-cards').classList.toggle('edit-mode',S.editMode);
+  if(S.editMode){loadScript('https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js',initSortable);}
+  else{destroySortable();syncFromDOM();showRoute(S.currentClusters);}
+}
+
+function initSortable(){
+  if(typeof Sortable==='undefined') return;
+  destroySortable();
+  S.currentClusters.forEach((_,di)=>{
+    const el=document.getElementById('dl-'+di);
+    if(!el) return;
+    sortables.push(Sortable.create(el,{group:'stops',animation:150,handle:'.drag-handle',ghostClass:'sortable-ghost',
+      onEnd:()=>{syncFromDOM();showRoute(S.currentClusters);}
+    }));
+  });
+}
+function destroySortable(){sortables.forEach(s=>s.destroy());sortables=[];}
+function syncFromDOM(){
+  S.currentClusters = S.currentClusters.map((_,di)=>{
+    const el=document.getElementById('dl-'+di);
+    if(!el) return [];
+    return Array.from(el.querySelectorAll('.stop[data-school]')).map(e=>JSON.parse(decodeURIComponent(e.dataset.school)));
+  });
+  // 드래그 후 번호 + 거리 즉시 갱신
+  S.currentClusters.forEach((g,di)=>{
+    const listEl = document.getElementById('dl-'+di);
+    if(listEl) {
+      const color = COLORS[di%COLORS.length];
+      listEl.querySelectorAll('.stop[data-school]').forEach((el,si)=>{
+        const numEl = el.querySelector('.stop-num');
+        if(numEl) { numEl.textContent = si+1; numEl.style.background = color; }
+      });
+    }
+    const meta = document.getElementById('dm-'+di);
+    if(meta) meta.textContent = `${g.length}개 학교 · ${calcDayDist(g).toFixed(1)}km`;
+  });
+}
+
+function delStop(di,si){
+  S.currentClusters[di].splice(si,1);
+  renderResult(S.currentClusters);
+  if(S.editMode)setTimeout(initSortable,0);
+  showRoute(S.currentClusters);
+  toast('삭제됨');
+}
+function moveStop(di,si,tdi){
+  const s=S.currentClusters[di].splice(si,1)[0];
+  S.currentClusters[tdi].push(s);
+  renderResult(S.currentClusters);
+  if(S.editMode)setTimeout(initSortable,0);
+  showRoute(S.currentClusters);
+  toast(`Day ${tdi+1}로 이동`);
+}
+
+// ── Auth ──────────────────────────────────────────────────────
+let currentUser = null;
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw = document.getElementById('login-pw').value;
+  const err = document.getElementById('login-err');
+  const btn = document.getElementById('login-btn');
+  if (!email || !pw) { err.textContent = '이메일과 비밀번호를 입력해주세요'; return; }
+  btn.disabled = true; btn.textContent = '로그인 중...'; err.textContent = '';
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pw })
+    });
+    const data = await res.json();
+    if (data.error || !data.access_token) {
+      err.textContent = '이메일 또는 비밀번호가 올바르지 않습니다';
+      btn.disabled = false; btn.textContent = '로그인';
+      return;
+    }
+    // 토큰 저장
+    localStorage.setItem('rp_token', data.access_token);
+    localStorage.setItem('rp_refresh', data.refresh_token);
+    currentUser = data.user;
+    onLoginSuccess();
+  } catch(e) {
+    err.textContent = '네트워크 오류가 발생했습니다';
+    btn.disabled = false; btn.textContent = '로그인';
+  }
+}
+
+async function checkSession() {
+  const token = localStorage.getItem('rp_token');
+  if (!token) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      // 토큰 만료 시 refresh 시도
+      const refreshed = await refreshToken();
+      return refreshed;
+    }
+    currentUser = await res.json();
+    return true;
+  } catch(e) { return false; }
+}
+
+async function refreshToken() {
+  const refresh = localStorage.getItem('rp_refresh');
+  if (!refresh) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refresh })
+    });
+    const data = await res.json();
+    if (!data.access_token) return false;
+    localStorage.setItem('rp_token', data.access_token);
+    localStorage.setItem('rp_refresh', data.refresh_token);
+    currentUser = data.user;
+    return true;
+  } catch(e) { return false; }
+}
+
+async function doLogout() {
+  try {
+    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${localStorage.getItem('rp_token')}` }
+    });
+  } catch(e) {}
+  localStorage.removeItem('rp_token');
+  localStorage.removeItem('rp_refresh');
+  currentUser = null;
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-pw').value = '';
+  document.getElementById('login-btn').disabled = false;
+  document.getElementById('login-btn').textContent = '로그인';
+}
+
+function onLoginSuccess() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('user-email').textContent = currentUser?.email || '';
+  loadSchools();
+  renderSaved();
+}
+
+// auth 헤더 포함 fetch
+function openSchoolModal(di){S.addingToDay=di;document.getElementById('school-search-input').value='';document.getElementById('school-results').innerHTML='';document.getElementById('school-results').style.display='none';document.getElementById('school-overlay').classList.add('open');}
+function closeSchoolModal(){document.getElementById('school-overlay').classList.remove('open');S.addingToDay=null;}
+function searchSchool(q){
+  const el=document.getElementById('school-results');
+  if(q.length<1){el.style.display='none';return;}
+  const matches=ALL_SCHOOLS.filter(s=>s.name.includes(q)||s.addr.includes(q)).slice(0,10);
+  if(!matches.length){el.innerHTML='<div class="school-item" style="color:var(--text3)">검색 결과 없음</div>';el.style.display='block';return;}
+  el.innerHTML=matches.map(s=>`<div class="school-item" onclick="addStop('${encodeURIComponent(JSON.stringify(s))}')"><div style="font-weight:500">${s.name}</div><div style="font-size:11px;color:var(--text3)">${s.type}·${s.addr}</div></div>`).join('');
+  el.style.display='block';
+}
+function addStop(enc){
+  const s=JSON.parse(decodeURIComponent(enc));
+  S.currentClusters[S.addingToDay].push(s);
+  closeSchoolModal();
+  renderResult(S.currentClusters);
+  if(S.editMode)setTimeout(initSortable,0);
+  showRoute(S.currentClusters);
+  toast(`${s.name} 추가됨`);
+}
+
+// ── 저장/불러오기 (Supabase) ──────────────────────────────────
+function saveRoute(){document.getElementById('route-name-input').value='';document.getElementById('route-overlay').classList.add('open');}
+function closeRouteModal(){document.getElementById('route-overlay').classList.remove('open');}
+
+async function confirmSaveRoute(){
+  const name = document.getElementById('route-name-input').value.trim();
+  if (!name) { toast('이름을 입력해주세요'); return; }
+  if (!currentUser) { toast('로그인이 필요합니다'); return; }
+  try {
+    const res = await authFetch('saved_routes', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: currentUser.id,
+        name,
+        clusters: S.currentClusters,
+        origin_text: S.originText,
+        dest_text: S.destText,
+        origin_coord: S.originCoord,
+        dest_coord: S.destCoord,
+      })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    closeRouteModal();
+    toast(`"${name}" 저장됨`);
+    renderSaved();
+  } catch(e) {
+    toast('저장 실패: ' + e.message);
+  }
+}
+
+async function renderSaved(){
+  const el = document.getElementById('saved-list');
+  if (!currentUser) { el.innerHTML = '<div class="empty-state">로그인이 필요합니다</div>'; return; }
+  el.innerHTML = '<div class="empty-state" style="padding:20px">불러오는 중...</div>';
+  try {
+    const res = await authFetch('saved_routes?select=*&order=created_at.desc&limit=50');
+    const routes = await res.json();
+    S.routes = routes;
+    if (!routes.length) {
+      el.innerHTML = '<div class="empty-state">🗺️<br><br>저장된 루트가 없습니다<br><small>루트 생성 후 저장해보세요</small></div>';
+      return;
+    }
+    el.innerHTML = routes.map((r,i) => `
+      <div class="saved-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div onclick="loadSaved(${i})" style="flex:1;cursor:pointer">
+            <div class="saved-name">${r.name}</div>
+            <div class="saved-meta">${new Date(r.created_at).toLocaleDateString('ko-KR')} · ${r.clusters?.length||0}일 · ${r.clusters?.reduce((s,g)=>s+g.length,0)||0}개 학교</div>
+          </div>
+          <button onclick="deleteSaved('${r.id}')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:2px 6px;font-size:16px" title="삭제">✕</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">불러오기 실패</div>';
+  }
+}
+
+function loadSaved(i){
+  const r = S.routes[i];
+  S.currentClusters = r.clusters;
+  S.originText = r.origin_text || '';
+  S.destText = r.dest_text || '';
+  S.originCoord = r.origin_coord;
+  S.destCoord = r.dest_coord;
+  if (S.originCoord) document.getElementById('origin-input').value = S.originText;
+  if (S.destCoord) document.getElementById('dest-input').value = S.destText;
+  showRoute(r.clusters);
+  renderResult(r.clusters);
+  document.getElementById('result-tab').style.display = 'block';
+  switchTab('result');
+}
+
+async function deleteSaved(id){
+  if (!confirm('이 루트를 삭제할까요?')) return;
+  try {
+    await authFetch(`saved_routes?id=eq.${id}`, { method: 'DELETE' });
+    toast('삭제됨');
+    renderSaved();
+  } catch(e) { toast('삭제 실패'); }
+}
+
+// ── 탭 ───────────────────────────────────────────────────────
+function switchTab(tab){
+  ['plan','result','saved'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display=t===tab?'block':'none';
+  });
+  document.getElementById('footer-plan').style.display=tab==='plan'?'block':'none';
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{b.classList.toggle('active',['plan','result','saved'][i]===tab);});
+  if(tab==='saved')renderSaved();
+}
+
+// ── 토스트 ───────────────────────────────────────────────────
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+// ── 클릭 외부 닫기 ────────────────────────────────────────────
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.addr-wrap')){document.querySelectorAll('.addr-drop').forEach(d=>d.style.display='none');}
+  if(!e.target.closest('#school-search-input')&&!e.target.closest('.school-results')){const el=document.getElementById('school-results');if(el)el.style.display='none';}
+});
+
+// ── 초기화 ───────────────────────────────────────────────────
+window.addEventListener('load', async ()=>{
+  loadLink('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+  renderPlaces();
+  initMap();
+  // 세션 확인
+  const loggedIn = await checkSession();
+  if (loggedIn) {
+    onLoginSuccess();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+});
+</script>
+</body>
+</html>
