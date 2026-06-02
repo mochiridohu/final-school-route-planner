@@ -507,22 +507,26 @@ function showRoute(clusters) {
   clearMap();
 
   // 출발지 마커
-  if(S.originCoord) {
+  const oc = S.originCoord;
+  if(oc && Array.isArray(oc) && oc.length === 2) {
     const icon = L.divIcon({
-      html:`<div style="width:32px;height:32px;border-radius:50%;background:#1a1a18;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">출발</div>`,
-      className:'',iconSize:[32,32],iconAnchor:[16,16]
+      html:`<div style="width:36px;height:36px;border-radius:50%;background:#1a1a18;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">출발</div>`,
+      className:'',iconSize:[36,36],iconAnchor:[18,18]
     });
-    markers.push(L.marker(S.originCoord,{icon,zIndexOffset:1000}).addTo(map).bindPopup(`<b>출발지</b><br>${S.originText||''}`));
+    markers.push(L.marker([oc[0],oc[1]],{icon,zIndexOffset:2000}).addTo(map).bindPopup(`<b>📍 출발지</b><br>${S.originText||''}`));
   }
 
-  // 도착지 마커 (출발지와 다를 때만)
-  const destCoord = S.destCoord || S.originCoord;
-  if(destCoord && JSON.stringify(destCoord) !== JSON.stringify(S.originCoord)) {
-    const icon = L.divIcon({
-      html:`<div style="width:32px;height:32px;border-radius:50%;background:#16a34a;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)">도착</div>`,
-      className:'',iconSize:[32,32],iconAnchor:[16,16]
-    });
-    markers.push(L.marker(destCoord,{icon,zIndexOffset:1000}).addTo(map).bindPopup(`<b>도착지</b><br>${S.destText||''}`));
+  // 도착지 마커
+  const dc = S.destCoord;
+  if(dc && Array.isArray(dc) && dc.length === 2) {
+    const isSame = oc && oc[0]===dc[0] && oc[1]===dc[1];
+    if(!isSame) {
+      const icon = L.divIcon({
+        html:`<div style="width:36px;height:36px;border-radius:50%;background:#16a34a;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">도착</div>`,
+        className:'',iconSize:[36,36],iconAnchor:[18,18]
+      });
+      markers.push(L.marker([dc[0],dc[1]],{icon,zIndexOffset:2000}).addTo(map).bindPopup(`<b>🏁 도착지</b><br>${S.destText||''}`));
+    }
   }
 
   clusters.forEach((group,di)=>{
@@ -530,18 +534,19 @@ function showRoute(clusters) {
     group.forEach((s,si)=>{
       markers.push(L.marker([s.lat,s.lng],{icon:pinIcon(si+1,color)}).addTo(map).bindPopup(`<b>Day${di+1}-${si+1}</b><br>${s.name}`));
     });
-    // 출발지 → 학교들 → 도착지 전체 경로선
+    // 출발지 → 학교들 → 도착지 경로선
     const pts = [];
-    if(S.originCoord) pts.push(S.originCoord);
+    if(oc) pts.push([oc[0],oc[1]]);
     group.forEach(s=>pts.push([s.lat,s.lng]));
-    if(destCoord) pts.push(destCoord);
-    else if(S.originCoord) pts.push(S.originCoord);
+    const endCoord = dc || oc;
+    if(endCoord) pts.push([endCoord[0],endCoord[1]]);
     if(pts.length>1) lines.push(L.polyline(pts,{color,weight:2.5,opacity:.7,dashArray:'6,4'}).addTo(map));
   });
 
-  // 전체 범위에 출발/도착 포함
-  const allPts = clusters.flat();
-  if(S.originCoord) allPts.push({lat:S.originCoord[0],lng:S.originCoord[1]});
+  // 전체 범위 맞추기 (출발/도착 포함)
+  const allPts = clusters.flat().map(s=>({lat:s.lat,lng:s.lng}));
+  if(oc) allPts.push({lat:oc[0],lng:oc[1]});
+  if(dc) allPts.push({lat:dc[0],lng:dc[1]});
   fitBounds(allPts);
 
   const box=document.getElementById('map-legend-box');
@@ -879,8 +884,27 @@ function openAddPlace(role){
 
 // ── 루트 생성 ─────────────────────────────────────────────────
 function generate(){
+  // 지역 선택 검증
+  if (!S.sido) {
+    alert('지역(시/도)을 먼저 선택해주세요.');
+    return;
+  }
+  if (S.gus.size === 0) {
+    alert('시/군/구를 선택해주세요.');
+    return;
+  }
+
   const schools = filteredSchools();
-  if (!schools.length) { toast('지역과 학교 종류를 선택해주세요'); return; }
+  if (!schools.length) {
+    alert('선택한 조건에 해당하는 학교가 없습니다.\n지역이나 학교 종류를 다시 확인해주세요.');
+    return;
+  }
+
+  if (!S.originCoord) {
+    alert('출발지를 설정해주세요.\n출발지가 설정되어야 지도에 핀이 표시됩니다.');
+    return;
+  }
+
   const btn = document.getElementById('gen-btn');
   btn.disabled = true; btn.textContent = '⏳ 계산 중...';
 
