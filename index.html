@@ -181,7 +181,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .logout-btn{font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer;white-space:nowrap}
 .logout-btn:hover{color:var(--danger);border-color:var(--danger)}
 </style>
-<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 </head>
 <body>
 
@@ -274,19 +273,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
       </div>
       <div class="sec">
         <div class="sec-label">출발지</div>
-        <div style="display:flex;gap:6px;margin-bottom:6px">
-          <input id="origin-input" type="text" placeholder="주소 검색 버튼을 눌러주세요" readonly style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--surface2);color:var(--text);cursor:pointer" onclick="openPostcode('origin')"/>
-          <button onclick="openPostcode('origin')" style="padding:0 14px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">검색</button>
-        </div>
-        <div class="places-row" id="origin-places"></div>
+        <input id="origin-input" type="text" readonly placeholder="아래에서 선택해주세요" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--surface2);color:var(--text);margin-bottom:8px"/>
+        <div id="origin-fixed-places" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       </div>
       <div class="sec">
         <div class="sec-label">도착지</div>
-        <div style="display:flex;gap:6px;margin-bottom:6px">
-          <input id="dest-input" type="text" placeholder="비워두면 출발지와 동일" readonly style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--surface2);color:var(--text);cursor:pointer" onclick="openPostcode('dest')"/>
-          <button onclick="openPostcode('dest')" style="padding:0 14px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">검색</button>
-        </div>
-        <div class="places-row" id="dest-places"></div>
+        <input id="dest-input" type="text" readonly placeholder="비워두면 출발지와 동일" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--surface2);color:var(--text);margin-bottom:8px"/>
+        <div id="dest-fixed-places" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       </div>
     </div>
     <div class="sfooter" id="footer-plan">
@@ -803,48 +796,44 @@ function adj(k,delta){
 }
 
 // ── 주소 검색 (Postcodify) ────────────────────────────────────
-// ── 주소 검색 (카카오 우편번호 팝업) ─────────────────────────
-const KAKAO_REST_KEY = '1487c2836c8094bf4b63e92c5c3a6571';
+// ── 고정 장소 (하드코딩) ──────────────────────────────────────
+const FIXED_PLACES = [
+  { name: '윤주네', addr: '경기도 남양주시 다산 중앙로82번길 106', coord: [37.618130, 127.164502] },
+  { name: '사무실', addr: '경기도 남양주시 다산순환로20',           coord: [37.611596, 127.152305] },
+  { name: '엄마네', addr: '경기도 남양주시 호평동 730번지',         coord: [37.651105, 127.254103] },
+];
 
-function openPostcode(role) {
-  new daum.Postcode({
-    oncomplete: function(data) {
-      const addr = data.roadAddress || data.jibunAddress;
-      const displayName = data.buildingName ? `${addr} (${data.buildingName})` : addr;
-      document.getElementById(role+'-input').value = displayName;
-      // 카카오 지오코딩으로 좌표 변환
-      geocodeKakao(addr, displayName, role);
-    }
-  }).open();
+function renderFixedPlaces() {
+  ['origin','dest'].forEach(role => {
+    const el = document.getElementById(`${role}-fixed-places`);
+    if (!el) return;
+    el.innerHTML = FIXED_PLACES.map((p,i) => `
+      <button class="place-fixed-btn" data-role="${role}" data-idx="${i}"
+        onclick="selectFixedPlace(${i},'${role}')"
+        style="padding:6px 14px;border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text2);transition:all .15s">
+        📍 ${p.name}
+      </button>`).join('');
+  });
 }
 
-async function geocodeKakao(addr, displayName, role) {
-  try {
-    const res = await fetch(`https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(addr)}`, {
-      headers: { 'Authorization': `KakaoAK ${KAKAO_REST_KEY}` }
-    });
-    const data = await res.json();
-    if (data.documents && data.documents.length > 0) {
-      const coord = [parseFloat(data.documents[0].y), parseFloat(data.documents[0].x)];
-      if (role === 'origin') { S.originCoord = coord; S.originText = displayName; }
-      else { S.destCoord = coord; S.destText = displayName; }
-      toast(`✅ ${role==='origin'?'출발지':'도착지'} 설정 완료`);
-      // 즐겨찾기 저장 물어보기
-      S.pendingPlace = { role, addr: displayName, coord };
-      document.getElementById('place-addr-text').textContent = displayName;
-      document.getElementById('place-name-input').value = '';
-      document.getElementById('place-overlay').classList.add('open');
-    }
-  } catch(e) {
-    // 지오코딩 실패해도 주소 텍스트는 저장
-    if (role === 'origin') S.originText = displayName;
-    else S.destText = displayName;
-    toast(`주소 설정됨 (좌표 변환 실패)`);
-  }
+// place-fixed-btn 활성화 스타일
+document.head.insertAdjacentHTML('beforeend',`<style>
+  .place-fixed-btn.on{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important}
+</style>`);
+
+function selectFixedPlace(idx, role) {
+  const p = FIXED_PLACES[idx];
+  document.getElementById(role+'-input').value = p.name;
+  if (role === 'origin') { S.originCoord = p.coord; S.originText = p.name; }
+  else { S.destCoord = p.coord; S.destText = p.name; }
+  // 버튼 활성화 표시
+  document.querySelectorAll(`.place-fixed-btn[data-role="${role}"]`).forEach(b => b.classList.remove('on'));
+  document.querySelector(`.place-fixed-btn[data-role="${role}"][data-idx="${idx}"]`)?.classList.add('on');
+  toast(`✅ ${role==='origin'?'출발지':'도착지'}: ${p.name}`);
 }
 
-// 구 검색 방식 (하위 호환용 — 사용 안 함)
-function searchAddr(){}
+function searchAddr(){} // 하위 호환용
+function openPostcode(){}
 
 function closePlaceModal(){document.getElementById('place-overlay').classList.remove('open');}
 function confirmPlace(){
@@ -1155,6 +1144,7 @@ async function doLogout() {
 function onLoginSuccess() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('user-email').textContent = currentUser?.email || '';
+  renderFixedPlaces();
   loadSchools();
   renderSaved();
 }
