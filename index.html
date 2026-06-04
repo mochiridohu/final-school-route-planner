@@ -677,28 +677,29 @@ function autoRecommend(){
 }
 
 // ── 완료 → 결과 생성 ─────────────────────────────────────────
-function finishManual(){
+async function finishManual(){
   const schools=filteredSchools();
   const assigned=schools.filter(s=>S.assignments[s.id]!==undefined);
   if(!assigned.length){toast('배정된 학교가 없습니다');return;}
 
-  // Day별 그룹 생성
   const groups=Array.from({length:S.days},()=>[]);
   schools.forEach(s=>{const di=S.assignments[s.id];if(di!==undefined)groups[di].push(s);});
   const validGroups=groups.filter(g=>g.length);
 
-  // 각 그룹 내 최단 경로 최적화
+  document.getElementById('day-selector').style.display='none';
+  mapMode='result';
+  toast('⏳ 도로 기반 경로 최적화 중...');
+
   const destCoord=S.destCoord||S.originCoord;
-  const optimized=validGroups.map(g=>{const ord=optimizeRoute(g,S.originCoord,destCoord);return ord.map(i=>g[i]);});
+  const optimized=[];
+  for(const g of validGroups){
+    const ord = await optimizeRouteOSRM(g, S.originCoord, destCoord);
+    optimized.push(ord.map(i=>g[i]));
+  }
   const sorted=sortClustersByOrigin(optimized,S.originCoord);
 
   S.currentClusters=sorted;
   S_day=0;
-
-  // 지도 Day 선택 바 숨기기
-  document.getElementById('day-selector').style.display='none';
-  mapMode='result';
-
   renderResult(sorted);
   document.getElementById('result-tab').style.display='block';
   switchTab('result');
@@ -832,12 +833,89 @@ function renderDayDetail(di){
   setTimeout(initSortable,50);
 }
 
-function resortDay(di){
+// ── OSRM 실제 도로 기반 경로 최적화 ─────────────────────────
+async function optimizeRouteOSRM(pts, startCoord, destCoord) {
+  if(!pts.length) return pts.map((_,i)=>i);
+  if(pts.length===1) return [0];
+
+  try {
+    // 출발지 + 학교들 + 도착지 좌표 목록
+    const allPts = [];
+    if(startCoord) allPts.push({lat:startCoord[0],lng:startCoord[1]});
+    pts.forEach(p=>allPts.push({lat:p.lat,lng:p.lng}));
+    const endCoord = destCoord||startCoord;
+    if(endCoord) allPts.push({lat:endCoord[0],lng:endCoord[1]});
+
+    const coordStr = allPts.map(p=>`${p.lng},${p.lat}`).join(';');
+    const url = `https://router.project-osrm.org/table/v1/driving/${coordStr}?annotations=duration`;
+
+    toast('⏳ 실제 도로 거리 계산 중...');
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('OSRM 오류');
+    const data = await res.json();
+    if(data.code !== 'Ok') throw new Error('OSRM 응답 오류');
+
+    const matrix = data.durations; // 초 단위 이동 시간 행렬
+    const n = pts.length;
+    const offset = startCoord ? 1 : 0; // 출발지가 있으면 인덱스 1부터 학교
+
+    // Nearest Neighbor TSP (실제 도로 시간 기반)
+    const startIdx = offset; // 출발지 다음이 첫 학교
+    const visited = new Array(allPts.length).fill(false);
+    visited[0] = true; // 출발지 방문 처리
+    const ord = [];
+    let cur = startIdx - 1; // 출발지 인덱스
+
+    for(let i=0; i<n; i++) {
+      let best=-1, bd=Infinity;
+      for(let j=offset; j<offset+n; j++) {
+        if(visited[j]) continue;
+        const t = matrix[cur][j];
+        if(t<bd){bd=t;best=j;}
+      }
+      visited[best]=true;
+      ord.push(best-offset); // 학교 인덱스로 변환
+      cur=best;
+    }
+
+    // 2-opt 개선 (도로 시간 기반)
+    let improved=true;
+    while(improved){
+      improved=false;
+      for(let i=0;i<n-1;i++){
+        for(let j=i+1;j<n;j++){
+          const a=i===0?(offset-1):offset+ord[i-1];
+          const b=offset+ord[i];
+          const c=offset+ord[j];
+          const d=j===n-1?(offset+n):offset+ord[j+1];
+          const before=matrix[a][b]+matrix[c][d];
+          const after=matrix[a][c]+matrix[b][d];
+          if(after<before-0.01){
+            ord.splice(i,j-i+1,...ord.slice(i,j+1).reverse());
+            improved=true;
+          }
+        }
+      }
+    }
+
+    const totalTime = matrix[offset-1<0?0:offset-1][offset+ord[0]];
+    toast(`✅ 도로 기반 최적화 완료! (OSRM)`);
+    return ord;
+
+  } catch(e) {
+    console.warn('OSRM 실패, 직선거리로 fallback:', e);
+    toast('⚠️ 도로 계산 실패 → 직선거리로 대체');
+    return optimizeRoute(pts, startCoord, destCoord);
+  }
+}
+
+async function resortDay(di) {
   const g=S.currentClusters[di];
-  const ord=optimizeRoute(g,S.originCoord,S.destCoord||S.originCoord);
+  const btn = document.querySelector(`#day-detail .resort-btn`);
+  if(btn){btn.disabled=true;btn.textContent='⏳ 계산 중...';}
+  const ord = await optimizeRouteOSRM(g, S.originCoord, S.destCoord||S.originCoord);
   S.currentClusters[di]=ord.map(i=>g[i]);
   renderDayDetail(di);renderDayTabs();showDayOnMap(di);
-  toast(`Day ${di+1} 재정렬 완료`);
 }
 
 // ── 드래그 ────────────────────────────────────────────────────
