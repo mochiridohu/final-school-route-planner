@@ -539,15 +539,35 @@ function renderFixedPlaces(){
 function selectFixedPlace(idx,role){
   const p=FIXED_PLACES[idx];
   document.getElementById(role+'-input').value=p.name;
-  if(role==='origin'){S.originCoord=p.coord;S.originText=p.name;}else{S.destCoord=p.coord;S.destText=p.name;}
+  if(role==='origin'){S.originCoord=p.coord;S.originText=p.name;}
+  else{S.destCoord=p.coord;S.destText=p.name;}
   document.querySelectorAll(`.fixed-btn[data-role="${role}"]`).forEach(b=>b.classList.remove('on'));
   document.querySelector(`.fixed-btn[data-role="${role}"][data-idx="${idx}"]`)?.classList.add('on');
   toast(`✅ ${role==='origin'?'출발지':'도착지'}: ${p.name}`);
+  // 지도가 이미 열려있으면 마커 즉시 반영
+  if(mapMode==='assign' && map) {
+    // 기존 출발/도착 마커 제거 후 재추가
+    markers = markers.filter(m=>{ const hasSchool=Object.values(schoolMarkers).includes(m); if(!hasSchool) map.removeLayer(m); return hasSchool; });
+    addOriginDestMarkers();
+  }
 }
 
 // ── 수동 배정 모드 ────────────────────────────────────────────
 let activeDayIdx=0; // 현재 핀 클릭시 배정할 Day
 let schoolMarkers={}; // id → marker
+
+function addOriginDestMarkers() {
+  if(S.originCoord) {
+    const icon=L.divIcon({html:`<div style="width:36px;height:36px;border-radius:50%;background:#1c1c1e;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">출발</div>`,className:'',iconSize:[36,36],iconAnchor:[18,18]});
+    const m = L.marker([S.originCoord[0],S.originCoord[1]],{icon,zIndexOffset:2000}).addTo(map).bindPopup(`<b>출발지</b><br>${S.originText}`);
+    markers.push(m);
+  }
+  if(S.destCoord && !(S.originCoord && S.originCoord[0]===S.destCoord[0] && S.originCoord[1]===S.destCoord[1])) {
+    const icon=L.divIcon({html:`<div style="width:36px;height:36px;border-radius:50%;background:#16a34a;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">도착</div>`,className:'',iconSize:[36,36],iconAnchor:[18,18]});
+    const m = L.marker([S.destCoord[0],S.destCoord[1]],{icon,zIndexOffset:2000}).addTo(map).bindPopup(`<b>도착지</b><br>${S.destText}`);
+    markers.push(m);
+  }
+}
 
 function startManualMode(){
   if(!S.sido){alert('지역을 먼저 선택해주세요.');return;}
@@ -556,14 +576,17 @@ function startManualMode(){
   const schools=filteredSchools();
   if(!schools.length){alert('해당 조건의 학교가 없습니다.');return;}
 
-  // 배정 초기화
   S.assignments={};
   mapMode='assign';
   activeDayIdx=0;
 
-  // 지도에 모든 학교 핀 (회색=미배정)
   clearMap();
   schoolMarkers={};
+
+  // 출발/도착 마커 먼저
+  addOriginDestMarkers();
+
+  // 학교 핀
   schools.forEach(s=>{
     const m=L.marker([s.lat,s.lng],{icon:pinIcon('',null,false,true)})
       .addTo(map)
@@ -574,13 +597,6 @@ function startManualMode(){
   });
   fitBounds(schools);
 
-  // 출발지 마커
-  if(S.originCoord){
-    const icon=L.divIcon({html:`<div style="width:36px;height:36px;border-radius:50%;background:#1c1c1e;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">출발</div>`,className:'',iconSize:[36,36],iconAnchor:[18,18]});
-    L.marker([S.originCoord[0],S.originCoord[1]],{icon,zIndexOffset:2000}).addTo(map).bindPopup(`<b>출발지</b><br>${S.originText}`);
-  }
-
-  // Day 선택 바 표시
   renderDaySelector();
   document.getElementById('day-selector').style.display='block';
   document.getElementById('recommend-btn').disabled=false;
@@ -717,6 +733,7 @@ function backToMap(){
 function startManualModeFromResult(){
   clearMap();
   schoolMarkers={};
+  addOriginDestMarkers();
   const schools=filteredSchools();
   schools.forEach(s=>{
     const di=S.assignments[s.id];
@@ -727,10 +744,6 @@ function startManualModeFromResult(){
     schoolMarkers[s.id]=m;
     markers.push(m);
   });
-  if(S.originCoord){
-    const icon=L.divIcon({html:`<div style="width:36px;height:36px;border-radius:50%;background:#1c1c1e;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.4)">출발</div>`,className:'',iconSize:[36,36],iconAnchor:[18,18]});
-    L.marker([S.originCoord[0],S.originCoord[1]],{icon,zIndexOffset:2000}).addTo(map);
-  }
   renderDaySelector();
   fitBounds(schools);
 }
