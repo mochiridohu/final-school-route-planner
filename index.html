@@ -336,9 +336,36 @@ const FIXED_PLACES=[
   {name:'엄마네',addr:'경기도 남양주시 호평동 730번지',coord:[37.651105,127.254103]},
 ];
 
-function authFetch(url,opts={}){
-  const token=localStorage.getItem('rp_token')||SUPABASE_KEY;
-  return fetch(`${SUPABASE_URL}/rest/v1/${url}`,{...opts,headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${token}`,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})}});
+async function authFetch(url, opts={}) {
+  const token = localStorage.getItem('rp_token') || SUPABASE_KEY;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${url}`, {
+    ...opts,
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation',
+      ...(opts.headers||{})
+    }
+  });
+  // 401이면 토큰 갱신 후 재시도
+  if(res.status === 401) {
+    const refreshed = await refreshToken();
+    if(refreshed) {
+      const newToken = localStorage.getItem('rp_token');
+      return fetch(`${SUPABASE_URL}/rest/v1/${url}`, {
+        ...opts,
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${newToken}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+          ...(opts.headers||{})
+        }
+      });
+    }
+  }
+  return res;
 }
 function loadScript(src,cb){const s=document.createElement('script');s.src=src;s.onload=cb;document.head.appendChild(s);}
 function loadLink(href){const l=document.createElement('link');l.rel='stylesheet';l.href=href;document.head.appendChild(l);}
@@ -859,11 +886,28 @@ async function optimizeRouteOSRM(pts, startCoord, destCoord) {
     const endCoord = destCoord||startCoord;
     if(endCoord) allPts.push({lat:endCoord[0],lng:endCoord[1]});
 
+    // 동일 좌표 미세 조정 (OSRM 오류 방지)
+    const seen = new Set();
+    allPts.forEach((p,i)=>{
+      const key = `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+      if(seen.has(key)){
+        // 미세하게 좌표 이동 (약 1m)
+        allPts[i] = {lat: p.lat + (Math.random()-0.5)*0.00002, lng: p.lng + (Math.random()-0.5)*0.00002};
+      }
+      seen.add(key);
+    });
+
     const coordStr = allPts.map(p=>`${p.lng},${p.lat}`).join(';');
     const url = `https://router.project-osrm.org/table/v1/driving/${coordStr}?annotations=duration`;
 
     toast('⏳ 실제 도로 거리 계산 중...');
-    const res = await fetch(url);
+
+    // 5초 타임아웃
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
     if(!res.ok) throw new Error('OSRM 오류');
     const data = await res.json();
     if(data.code !== 'Ok') throw new Error('OSRM 응답 오류');
@@ -1010,9 +1054,17 @@ async function confirmSaveRoute(){
   if(!currentUser){toast('로그인이 필요합니다');return;}
   try{
     const res=await authFetch('saved_routes',{method:'POST',body:JSON.stringify({user_id:currentUser.id,name,clusters:S.currentClusters,origin_text:S.originText,dest_text:S.destText,origin_coord:S.originCoord,dest_coord:S.destCoord})});
-    if(!res.ok) throw new Error(await res.text());
+    if(!res.ok){
+      const errText = await res.text();
+      console.error('저장 실패:', res.status, errText);
+      toast(`저장 실패 (${res.status})`);
+      return;
+    }
     closeRouteModal();toast(`"${name}" 저장됨`);renderSaved();
-  }catch(e){toast('저장 실패');}
+  }catch(e){
+    console.error('저장 오류:', e);
+    toast('저장 실패: 네트워크 오류');
+  }
 }
 async function renderSaved(){
   const el=document.getElementById('saved-list');if(!currentUser){el.innerHTML='<div class="empty-state">로그인이 필요합니다</div>';return;}
