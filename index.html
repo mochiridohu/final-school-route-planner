@@ -147,7 +147,8 @@ body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--bg);co
 .badge-m{background:#fef9c3;color:#854d0e}
 .badge-h{background:#ede9fe;color:#5b21b6}
 .kakao-btn{padding:3px 7px;background:#FEE500;color:#3C1E1E;border-radius:5px;font-size:10px;font-weight:700;text-decoration:none;white-space:nowrap}
-.move-btn{background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--text3);padding:2px 5px;font-size:10px;font-weight:600;white-space:nowrap}
+.move-select{border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--text3);padding:2px 4px;font-size:10px;font-weight:600;background:var(--surface);outline:none;max-width:52px}
+.move-btn{display:none}
 .stop-del{background:none;border:none;cursor:pointer;color:var(--text3);padding:3px 5px;font-size:15px;line-height:1}
 .stop-del:active{color:var(--danger)}
 .add-stop-btn{width:100%;padding:8px;border:1.5px dashed var(--border);border-radius:var(--r);background:none;color:var(--text3);font-size:12px;cursor:pointer;margin-top:7px;font-weight:500}
@@ -190,10 +191,24 @@ body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--bg);co
   #day-selector{left:12px;right:12px;transform:none;width:auto}
 }
 @media print{
-  #panel-header,#tabs,.sfooter,#map-area,.act-row{display:none!important}
-  #panel{width:100%;height:auto;overflow:visible;box-shadow:none}
-  .sbody{overflow:visible;max-height:none}
-  .drag-handle,.stop-del,.move-btn,.kakao-btn,.resort-btn,.add-stop-btn{display:none!important}
+  @page{margin:10mm 8mm;size:A4}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #panel-header,#tabs,.sfooter,#map-area,.act-row,.day-tabs-row{display:none!important}
+  #app{display:block;height:auto}
+  #panel{width:100%;height:auto;overflow:visible;box-shadow:none;border:none}
+  .sbody{overflow:visible;max-height:none;padding:0}
+  #tab-result{display:block!important}
+  #tab-plan,#tab-saved{display:none!important}
+  .drag-handle,.stop-del,.move-btn,.move-select,.kakao-btn,.resort-btn,.add-stop-btn,.day-info-bar .resort-btn{display:none!important}
+  .day-info-bar{padding:4px 8px;margin-bottom:4px;page-break-inside:avoid}
+  .stop{padding:3px 2px;border-bottom:0.5px solid #eee}
+  .stop-num{width:16px;height:16px;font-size:8px;flex-shrink:0}
+  .stop-name{font-size:10px;font-weight:500}
+  .stop-sub{font-size:9px}
+  .stop-badge{font-size:9px;padding:1px 4px}
+  .stop-actions{gap:2px}
+  .stats-grid{display:none}
+  #day-detail{page-break-inside:avoid}
 }
 .fixed-btn.on,.place-fixed-btn.on{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important}
 </style>
@@ -284,7 +299,7 @@ body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--bg);co
       <div class="stats-grid" id="stats"></div>
       <div class="act-row">
         <button class="act-btn" onclick="saveRoute()">💾 저장</button>
-        <button class="act-btn" onclick="window.print()">🖨️ 출력</button>
+        <button class="act-btn" onclick="printRoute()">🖨️ 출력</button>
         <button class="act-btn" onclick="backToMap()">← 지도 편집</button>
       </div>
       <div class="day-tabs-row" id="day-tabs"></div>
@@ -836,7 +851,8 @@ function renderDayDetail(di){
   const dist=calcDayDist(group);
   const origin=S.originText||'출발지',dest=S.destText||origin;
   const others=S.currentClusters.map((_,i)=>i).filter(i=>i!==di);
-  const moveBtns=others.map(i=>`<button class="move-btn" onclick="moveStop(${di},__SI__,${i})">→D${i+1}</button>`).join('');
+  const moveOptions=others.map(i=>`<option value="${i}">→D${i+1}</option>`).join('');
+  const moveDropdown=others.length ? `<select class="move-select" onchange="moveStopBySelect(${di},__SI__,this)" title="다른 Day로 이동"><option value="">이동</option>${moveOptions}</select>` : '';
   const stops=group.map((s,si)=>{
     const bc=s.type==='초등학교'?'badge-e':s.type==='중학교'?'badge-m':'badge-h';
     const tl=s.type==='초등학교'?'초등':s.type==='중학교'?'중등':'고등';
@@ -849,7 +865,7 @@ function renderDayDetail(di){
       <div class="stop-actions">
         <span class="stop-badge ${bc}">${tl}</span>
         <a href="${kakaoUrl}" target="_blank" class="kakao-btn">길찾기</a>
-        ${moveBtns.replace(/__SI__/g,si)}
+        ${moveDropdown.replace(/__SI__/g,si)}
         <button class="stop-del" onclick="delStop(${di},${si})">✕</button>
       </div>
     </div>`;
@@ -993,6 +1009,103 @@ function syncFromDOM(){
   if(meta) meta.textContent=`${S.currentClusters[di].length}개 학교 · ${calcDayDist(S.currentClusters[di]).toFixed(1)}km`;
 }
 function delStop(di,si){S.currentClusters[di].splice(si,1);renderDayDetail(di);renderDayTabs();showDayOnMap(di);toast('삭제됨');}
+function printRoute() {
+  if(!S.currentClusters || !S.currentClusters.length) { toast('출력할 코스가 없습니다'); return; }
+
+  const ROWS_PER_PAGE = 30;
+  const di = S_day;
+  const group = S.currentClusters[di];
+  const color = ['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2','#be185d','#ea580c','#0d9488','#854d0e'][di % 10];
+  const routeName = (S.currentRouteName || '방문 코스') + ` - Day ${di+1}`;
+  const today = new Date().toLocaleDateString('ko-KR');
+
+  // 30개씩 페이지 분할
+  const pages = [];
+  for(let i = 0; i < group.length; i += ROWS_PER_PAGE) {
+    pages.push(group.slice(i, i + ROWS_PER_PAGE));
+  }
+
+  let html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>${routeName}</title>
+<style>
+  @page { size: A4; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans KR','Apple SD Gothic Neo',sans-serif; font-size: 11px; color: #1c1c1e; }
+  .page { page-break-after: always; padding-bottom: 8px; }
+  .page:last-child { page-break-after: auto; }
+  .page-header { text-align: center; margin-bottom: 10px; border-bottom: 2px solid ${color}; padding-bottom: 8px; }
+  .page-header h2 { font-size: 15px; font-weight: 700; color: ${color}; }
+  .page-header p { font-size: 10px; color: #6e6e73; margin-top: 3px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: ${color}; color: #fff; font-size: 11px; font-weight: 700; padding: 7px 8px; text-align: center; border: 1px solid #ccc; }
+  td { padding: 6px 8px; border: 1px solid #d1d5db; font-size: 11px; vertical-align: middle; }
+  tr:nth-child(even) { background: #f8f9fa; }
+  .num-col { text-align: center; width: 36px; color: #6e6e73; font-weight: 600; }
+  .school-col { width: 120px; }
+  .type-col { text-align: center; width: 50px; }
+  .visit-col { text-align: center; width: 70px; }
+  .memo-col { width: auto; }
+  .footer { margin-top: 6px; font-size: 9px; color: #9ca3af; text-align: right; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>`;
+
+  pages.forEach((rows, pageIdx) => {
+    html += `<div class="page">
+  <div class="page-header">
+    <h2>📍 ${routeName}</h2>
+    <p>${today} · ${group.length}개 학교 · ${pageIdx+1}/${pages.length} 페이지</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th class="num-col">번호</th>
+        <th class="school-col">학교명</th>
+        <th class="type-col">구분</th>
+        <th class="visit-col">방문 여부</th>
+        <th class="memo-col">특이사항</th>
+      </tr>
+    </thead>
+    <tbody>`;
+
+    rows.forEach((s, i) => {
+      const num = pageIdx * ROWS_PER_PAGE + i + 1;
+      const type = s.type==='초등학교'?'초등':s.type==='중학교'?'중등':'고등';
+      html += `<tr>
+        <td class="num-col">${num}</td>
+        <td class="school-col">${s.name}</td>
+        <td class="type-col">${type}</td>
+        <td class="visit-col"></td>
+        <td class="memo-col"></td>
+      </tr>`;
+    });
+
+    html += `</tbody>
+  </table>
+  <div class="footer">루트플래너 · ${today}</div>
+</div>`;
+  });
+
+  html += `<script>window.onload=function(){window.print();}<\/script></body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+// 저장 시 루트 이름 기억
+let S_routeName = '';
+
+function moveStopBySelect(di,si,sel){
+  const tdi=parseInt(sel.value);
+  if(isNaN(tdi)) return;
+  sel.value=''; // 초기화
+  moveStop(di,si,tdi);
+}
 function moveStop(di,si,tdi){const s=S.currentClusters[di].splice(si,1)[0];S.currentClusters[tdi].push(s);renderDayDetail(di);renderDayTabs();showDayOnMap(di);toast(`Day ${tdi+1}로 이동`);}
 
 // ── 학교 추가 모달 ────────────────────────────────────────────
@@ -1052,6 +1165,7 @@ async function confirmSaveRoute(){
   const name=document.getElementById('route-name-input').value.trim();
   if(!name){toast('이름을 입력해주세요');return;}
   if(!currentUser){toast('로그인이 필요합니다');return;}
+  S.currentRouteName = name;
   try{
     const res=await authFetch('saved_routes',{method:'POST',body:JSON.stringify({user_id:currentUser.id,name,clusters:S.currentClusters,origin_text:S.originText,dest_text:S.destText,origin_coord:S.originCoord,dest_coord:S.destCoord})});
     if(!res.ok){
